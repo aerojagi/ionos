@@ -6,3 +6,4 @@ all:
           ansible_host: 212.132.92.205
           ansible_user: root
           ansible_ssh_private_key_file: /home/student/.ssh/id_ed25519
+          ansible_python_interpreter: /usr/bin/python3
