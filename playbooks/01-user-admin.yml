@@ -1,31 +1,78 @@
-- name: Ensure ansible admin user exists (idempotent)
+# - name: Ensure ansible admin user exists (idempotent)
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
+
+#   vars:
+#     admin_email: "{{ admin_email }}"
+#     admin_firstname: "Ansible"
+#     admin_lastname: "Admin"
+
+#   tasks:
+#     - name: Lookup user by email via filter
+#       ionoscloudsdk.ionoscloud.user_info:
+#         depth: 1
+#         filters:
+#           email: "{{ admin_email }}"
+#       register: user_lookup
+
+#     - name: Set exists flag
+#       set_fact:
+#         admin_exists: "{{ (user_lookup.users | default([]) | length) > 0 }}"
+
+    # - name: Create user only when missing
+    #   when: not admin_exists
+    #   ionoscloudsdk.ionoscloud.user:
+    #     firstname: "{{ admin_firstname }}"
+    #     lastname: "{{ admin_lastname }}"
+    #     email: "{{ admin_email }}"
+    #     user_password: "{{ ionos_ansible_admin_password }}"
+    #     administrator: true
+    #     state: present
+- name: Ensure ansible admin user exists
   hosts: localhost
   connection: local
   gather_facts: false
 
   vars:
-    admin_email: "{{ admin_email }}"
-    admin_firstname: "Ansible"
-    admin_lastname: "Admin"
+    admin_firstname: "{{ admin_firstname | default('Ansible') }}"
+    admin_lastname: "{{ admin_lastname | default('Admin') }}"
+    admin_force_password_update: false
 
   tasks:
-    - name: Lookup user by email via filter
-      ionoscloudsdk.ionoscloud.user_info:
-        depth: 1
-        filters:
-          email: "{{ admin_email }}"
-      register: user_lookup
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - admin_email is defined
+          - admin_email | length > 3
+          - "'@' in admin_email"
+          - ionos_ansible_admin_password is defined
+          - ionos_ansible_admin_password | length >= 12
+        fail_msg: >
+          Required vars are missing or invalid.
+          Provide admin_email and ensure ionos_ansible_admin_password exists in vault.
 
-    - name: Set exists flag
-      set_fact:
-        admin_exists: "{{ (user_lookup.users | default([]) | length) > 0 }}"
-
-    - name: Create user only when missing
+    - name: Ensure IONOS admin user is present
       ionoscloudsdk.ionoscloud.user:
         firstname: "{{ admin_firstname }}"
         lastname: "{{ admin_lastname }}"
         email: "{{ admin_email }}"
-        user_password: "{{ ionos_ansible_admin_password }}"
         administrator: true
+        user_password: "{{ ionos_ansible_admin_password }}"
+        ignored_properties: >-
+          {{ [] if admin_force_password_update else ['user_password'] }}
         state: present
-      when: not admin_exists
+        wait: true
+        wait_timeout: 600
+        token: "{{ ionos_token | default(omit) }}"
+        username: "{{ ionos_username | default(omit) }}"
+        password: "{{ ionos_password | default(omit) }}"
+      no_log: true
+      register: admin_user_result
+
+    - name: Show result summary
+      ansible.builtin.debug:
+        msg:
+          - "changed={{ admin_user_result.changed }}"
+          - "user_id={{ admin_user_result.user.id | default('n/a') }}"
+      no_log: false
