@@ -45,4 +45,4 @@
         msg:
           - "changed={{ admin_user_result.changed }}"
           - "user_id={{ admin_user_result.user.id | default('n/a') }}"
-      no_log: false
+      no_log: false 

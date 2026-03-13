@@ -1,0 +1,76 @@
+---
+- name: Ensure IONOS users and groups exist
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ionos_group_name: "DevOps-Team"
+    ionos_users:
+      - firstname: "Jagan"
+        lastname: "Kumar"
+        email: "jagan@example.com"
+        password: "{{ ionos_default_user_password }}"
+      - firstname: "Ansible"
+        lastname: "User2"
+        email: "ansible.user2@example.com"
+        password: "{{ ionos_default_user_password }}"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - ionos_default_user_password is defined
+          - ionos_default_user_password | length >= 12
+          - ionos_group_name | length > 0
+
+    - name: Ensure non-admin users exist
+      ionoscloudsdk.ionoscloud.user:
+        firstname: "{{ item.firstname }}"
+        lastname: "{{ item.lastname }}"
+        email: "{{ item.email }}"
+        user_password: "{{ item.password }}"
+        administrator: false
+        ignored_properties:
+          - user_password
+        state: present
+        wait: true
+        wait_timeout: 600
+      loop: "{{ ionos_users }}"
+      no_log: true
+
+    - name: Ensure IONOS group exists
+      ionoscloudsdk.ionoscloud.group:
+        name: "{{ ionos_group_name }}"
+        create_datacenter: true
+        create_snapshot: false
+        reserve_ip: false
+        access_activity_log: true
+        create_pcc: false
+        s3_privilege: false
+        create_backup_unit: false
+        create_internet_access: false
+        create_k8s_cluster: false
+        create_flow_log: false
+        access_and_manage_monitoring: false
+        access_and_manage_certificates: false
+        manage_dbaas: false
+        state: present
+        wait: true
+        wait_timeout: 600
+
+    - name: Ensure users are members of the group
+      ionoscloudsdk.ionoscloud.group:
+        group: "{{ ionos_group_name }}"
+        users: "{{ ionos_users | map(attribute='email') | list }}"
+        state: update
+        wait: true
+        wait_timeout: 600
+
+    - name: List groups
+      ionoscloudsdk.ionoscloud.group_info:
+      register: group_list_response
+
+    - name: Show groups
+      ansible.builtin.debug:
+        var: group_list_response.groups
