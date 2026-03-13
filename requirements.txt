@@ -1,0 +1,2 @@
+ionoscloud==6.1.13
+PyYAML>=6.0

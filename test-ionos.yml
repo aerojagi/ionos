@@ -1,0 +1,12 @@
+- name: Test IONOS connection
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Get datacenters
+      ionoscloudsdk.ionoscloud.datacenter_info:
+      register: result
+
+    - debug:
+        var: result
