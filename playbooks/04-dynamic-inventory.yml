@@ -1,0 +1,55 @@
+---
+- name: Generate inventory file from IONOS VDC
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vdc_name: "lab-vdc-01"
+    ssh_user: "root"
+    ssh_private_key_file: "{{ lookup('ansible.builtin.env', 'HOME') + '/.ssh/id_ed25519' }}"
+    generated_inventory_file: "inventory_ionos.yml"
+
+  tasks:
+    - name: Get all servers in the VDC
+      ionoscloudsdk.ionoscloud.server_info:
+        datacenter: "{{ vdc_name }}"
+      register: server_info_result
+
+    - name: Fail if no servers found
+      ansible.builtin.assert:
+        that:
+          - server_info_result.servers is defined
+          - server_info_result.servers | length > 0
+        fail_msg: "No servers found in VDC {{ vdc_name }}"
+
+    - name: Get NIC info for each server
+      ionoscloudsdk.ionoscloud.nic_info:
+        datacenter: "{{ vdc_name }}"
+        server: "{{ item.properties.name }}"
+      loop: "{{ server_info_result.servers }}"
+      loop_control:
+        label: "{{ item.properties.name }}"
+      register: nic_info_results
+
+    - name: Write inventory file
+      ansible.builtin.copy:
+        dest: "{{ generated_inventory_file }}"
+        mode: "0644"
+        content: |
+          all:
+            children:
+              ionos_vdc_hosts:
+                hosts:
+          {% for result in nic_info_results.results %}
+          {%   if result.nics is defined and (result.nics | length) > 0 and result.nics[0].properties.ips is defined and (result.nics[0].properties.ips | length) > 0 %}
+                  {{ result.item.properties.name }}:
+                    ansible_host: {{ result.nics[0].properties.ips[0] }}
+                    ansible_user: {{ ssh_user }}
+                    ansible_ssh_private_key_file: {{ ssh_private_key_file }}
+          {%   endif %}
+          {% endfor %}
+
+    - name: Show generated inventory file path
+      ansible.builtin.debug:
+        msg: "Created {{ generated_inventory_file }}"
