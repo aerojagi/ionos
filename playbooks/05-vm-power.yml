@@ -1,0 +1,87 @@
+---
+- name: Manage IONOS VM power state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vdc_name: "lab-vdc-01"
+    vm_name: "ubuntu-small-01"
+    desired_power_state: "running"   # valid: running, stopped
+    power_wait_timeout: 900
+
+  tasks:
+    - name: Validate desired power state
+      ansible.builtin.assert:
+        that:
+          - desired_power_state in ['running', 'stopped']
+        fail_msg: "desired_power_state must be 'running' or 'stopped'"
+
+    - name: Get all servers in the VDC
+      ionoscloudsdk.ionoscloud.server_info:
+        datacenter: "{{ vdc_name }}"
+      register: server_info_result
+
+    - name: Select matching server by name
+      ansible.builtin.set_fact:
+        matching_servers: >-
+          {{
+            server_info_result.servers
+            | selectattr('properties.name', 'equalto', vm_name)
+            | list
+          }}
+
+    - name: Fail if VM was not found or is ambiguous
+      ansible.builtin.assert:
+        that:
+          - matching_servers | length == 1
+        fail_msg: >-
+          Expected exactly one VM named '{{ vm_name }}' in VDC '{{ vdc_name }}',
+          but found {{ matching_servers | length }}
+
+    - name: Set VM facts
+      ansible.builtin.set_fact:
+        vm_id: "{{ matching_servers[0].id }}"
+        vm_state_before: "{{ matching_servers[0].properties.vm_state | default('UNKNOWN') }}"
+
+    - name: Show current VM state
+      ansible.builtin.debug:
+        msg:
+          - "VM name: {{ vm_name }}"
+          - "VM id: {{ vm_id }}"
+          - "Current state: {{ vm_state_before }}"
+          - "Desired state: {{ desired_power_state }}"
+
+    - name: Ensure VM power state
+      ionoscloudsdk.ionoscloud.server:
+        datacenter: "{{ vdc_name }}"
+        instance_ids:
+          - "{{ vm_id }}"
+        wait: true
+        wait_timeout: "{{ power_wait_timeout }}"
+        state: "{{ desired_power_state }}"
+      register: power_result
+
+    - name: Refresh VM info after power action
+      ionoscloudsdk.ionoscloud.server_info:
+        datacenter: "{{ vdc_name }}"
+      register: server_info_after
+
+    - name: Select the VM after power action
+      ansible.builtin.set_fact:
+        matching_servers_after: >-
+          {{
+            server_info_after.servers
+            | selectattr('properties.name', 'equalto', vm_name)
+            | list
+          }}
+
+    - name: Set final VM state
+      ansible.builtin.set_fact:
+        vm_state_after: "{{ matching_servers_after[0].properties.vm_state | default('UNKNOWN') }}"
+
+    - name: Show final VM state
+      ansible.builtin.debug:
+        msg:
+          - "Changed: {{ power_result.changed }}"
+          - "Final state: {{ vm_state_after }}"

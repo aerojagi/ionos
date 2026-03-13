@@ -409,6 +409,59 @@ ansible-playbook -i inventory playbooks/04-dynamic-inventory.yml --ask-vault-pas
 ansible ionos_vdc_hosts -i inventory_ionos.yml -m ping
 ```
 
+## 5. Start or stop the VM
+
+```bash
+ansible-playbook -i inventory playbooks/05-vm-power.yml \
+  -e "vdc_name=lab-vdc-01 vm_name=ubuntu-small-01 desired_power_state=running" \
+  --ask-vault-pass
+```
+
+To stop the VM:
+
+```bash
+ansible-playbook -i inventory playbooks/05-vm-power.yml \
+  -e "vdc_name=lab-vdc-01 vm_name=ubuntu-small-01 desired_power_state=stopped" \
+  --ask-vault-pass
+```
+
+This playbook:
+
+- looks up the VM in the specified VDC
+- validates that exactly one matching VM exists
+- changes the VM power state to the requested value
+- waits for the operation to complete
+- shows the final VM state
+
+### Supported power states
+
+- `running`
+- `stopped`
+
+Example:
+
+```bash
+ansible-playbook -i inventory playbooks/05-vm-power.yml \
+  -e "desired_power_state=running" \
+  --ask-vault-pass
+```
+
+This playbook is useful for day-to-day lab operations when you want to start or shut down the VM without recreating the infrastructure.
+
+### Recommended follow-up
+
+After starting the VM again, regenerate the dynamic inventory:
+
+```bash
+ansible-playbook -i inventory playbooks/04-dynamic-inventory.yml --ask-vault-pass
+```
+
+Then test connectivity:
+
+```bash
+ansible all -i playbooks/inventory_ionos.yml -m ping
+```
+
 ---
 
 ## Suggested next steps
